@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"FriendlyName": "Blsqui SDK",
+	"Description": "Official Unreal Engine 5 SDK for Blsqui — Flow blockchain Local loopback Auth integration & in-game transaction dialogs.",
+	"Category": "Blockchain",
+	"CreatedBy": "Blsqui",
+	"CreatedByURL": "https://github.com/blsqui",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "BlsquiSDK",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
