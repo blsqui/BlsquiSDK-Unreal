@@ -18,7 +18,7 @@
 		{
 			"Name": "BlsquiSDK",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		}
 	]
 }
