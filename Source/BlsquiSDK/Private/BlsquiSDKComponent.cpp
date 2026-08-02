@@ -26,8 +26,6 @@ void UBlsquiSDKComponent::RequestTransaction(float Amount, const FString& Destin
         return; 
     }
 
-    // 🛠️ AUTO-FIX: Force show the mouse cursor and set input mode to UI/Game 
-    // so clicks never get ignored by the viewport background!
     if (APlayerController* PC = Cast<APlayerController>(GetOwner()))
     {
         PC->bShowMouseCursor = true;

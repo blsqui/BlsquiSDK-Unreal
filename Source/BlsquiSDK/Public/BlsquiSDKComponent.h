@@ -43,7 +43,7 @@ struct FTxResult
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTransactionCompleted, const FTxResult&, Result);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
-class SDKTEST1_API UBlsquiSDKComponent : public UActorComponent
+class BLSQUISDK_API UBlsquiSDKComponent : public UActorComponent
 {
     GENERATED_BODY()
 
