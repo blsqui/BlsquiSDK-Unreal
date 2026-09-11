@@ -6,96 +6,132 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/SecureHash.h"
 #include "HAL/PlatformMisc.h"
+#include "GenericPlatform/GenericPlatformHttp.h"
 #include "Misc/Guid.h"
-#include "TimerManager.h"
 
 UBlsquiSDKComponent::UBlsquiSDKComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    PrimaryComponentTick.bStartWithTickEnabled = true;
+    PrimaryComponentTick.bStartWithTickEnabled = false;
     PrimaryComponentTick.bTickEvenWhenPaused = true;
     bIsWaitingForNextPoll = false;
+    bIsPollingActive = false;
+    bIsCanceled = false;
     LastPollTime = 0.0f;
+    StartTime = 0.0f;
+    bActiveVerbose = false;
 }
 
-void UBlsquiSDKComponent::RequestTransaction(float Amount, const FString& Destination, bool bIsTestnet, bool bVerbose)
+void UBlsquiSDKComponent::RequestTransaction(const FBlsquiTxOptions& Options)
 {
-    if (GetWorld() == nullptr)
-    {
-        UE_LOG(LogTemp, Error, TEXT("[BlsquiSDK] CRASH AVERTED: GetWorld() is NULL!"));
-        return; 
-    }
-
-    if (APlayerController* PC = Cast<APlayerController>(GetOwner()))
-    {
-        PC->bShowMouseCursor = true;
-        
-        FInputModeGameAndUI InputMode;
-        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        InputMode.SetHideCursorDuringCapture(false);
-        PC->SetInputMode(InputMode);
-    }
-
-    ActiveBaseUrl = bIsTestnet ? TESTNET_URL : MAINNET_URL;
+    bIsCanceled = false;
+    bActiveVerbose = Options.bVerbose;
     ActiveNonce = GenerateClientNonce();
-    bActiveVerbose = bVerbose;
+
+    FString BaseGatewayUrl = Options.bIsTestnet ? TESTNET_GATEWAY_URL : MAINNET_GATEWAY_URL;
+    FString BasePollApi    = Options.bIsTestnet ? TEXT("https://lab.blsqui.net/api/status") : MAINNET_POLL_API;
+    ActivePollUrl          = FString::Printf(TEXT("%s?nonce=%s"), *BasePollApi, *FGenericPlatformHttp::UrlEncode(ActiveNonce));
 
     int64 CurrentTime = FDateTime::UtcNow().ToUnixTimestamp();
 
-    // Build payment signer URL safely
-    FString FullUrl = FString::Printf(TEXT("%s?nonce=%s&to=%s&price=%.2f&issued_time=%lld"),
-        *ActiveBaseUrl, *ActiveNonce, *Destination, Amount, CurrentTime);
+    // Construct query parameters
+    TArray<FString> QueryParts;
+    QueryParts.Add(FString::Printf(TEXT("flix=%s"), *FGenericPlatformHttp::UrlEncode(Options.FlixId)));
+    QueryParts.Add(FString::Printf(TEXT("issued_time=%lld"), CurrentTime));
+    QueryParts.Add(FString::Printf(TEXT("nonce=%s"), *FGenericPlatformHttp::UrlEncode(ActiveNonce)));
+
+    for (const TPair<FString, FString>& Pair : Options.Args)
+    {
+        FString TrimmedVal = Pair.Value.TrimStartAndEnd();
+        if (!TrimmedVal.IsEmpty())
+        {
+            QueryParts.Add(FString::Printf(TEXT("%s=%s"), 
+                *FGenericPlatformHttp::UrlEncode(Pair.Key), 
+                *FGenericPlatformHttp::UrlEncode(TrimmedVal)));
+        }
+    }
+
+    FString FullUrl = FString::Printf(TEXT("%s?%s"), *BaseGatewayUrl, *FString::Join(QueryParts, TEXT("&")));
 
     if (bActiveVerbose)
     {
-        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Launching browser (%s) -> %s"), bIsTestnet ? TEXT("TESTNET") : TEXT("MAINNET"), *FullUrl);
+        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Mode: Unreal Native Browser [%s]"), Options.bIsTestnet ? TEXT("TESTNET") : TEXT("MAINNET"));
+        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Wallet Gateway URL: %s"), *FullUrl);
         UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Nonce: %s"), *ActiveNonce);
     }
 
-    // Open user browser
+    // Launch system browser
     FPlatformProcess::LaunchURL(*FullUrl, nullptr, nullptr);
 
-    // Start polling loop
+    // Start background polling loop
     StartPolling();
+}
+
+void UBlsquiSDKComponent::CancelTransaction()
+{
+    bIsCanceled = true;
+    if (CurrentHttpRequest.IsValid())
+    {
+        CurrentHttpRequest->CancelRequest();
+        CurrentHttpRequest.Reset();
+    }
+
+    if (bIsPollingActive)
+    {
+        FTxResult CanceledResult;
+        CanceledResult.Status = TEXT("CANCELED");
+        CanceledResult.Nonce = ActiveNonce;
+        CanceledResult.Error = TEXT("Transaction canceled by user.");
+        CompleteTransaction(CanceledResult);
+    }
+}
+
+void UBlsquiSDKComponent::StartPolling()
+{
+    bIsPollingActive = true;
+    bIsWaitingForNextPoll = false;
+    SetComponentTickEnabled(true);
+    StartTime = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0f;
+
+    if (bActiveVerbose)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] 🚀 Starting polling loop..."));
+    }
+
+    PollTick();
 }
 
 void UBlsquiSDKComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // Our custom, pause-proof timer logic
+    if (!bIsPollingActive)
+    {
+        return;
+    }
+
     if (bIsWaitingForNextPoll && GetWorld())
     {
-        // GetRealTimeSeconds ignores the game being paused!
         float CurrentRealTime = GetWorld()->GetRealTimeSeconds();
-        
         if (CurrentRealTime - LastPollTime >= POLL_INTERVAL_SECONDS)
         {
-            // Time is up! Stop waiting and fire the next request
             bIsWaitingForNextPoll = false;
             PollTick();
         }
     }
 }
 
-void UBlsquiSDKComponent::StartPolling()
-{
-    SetComponentTickEnabled(true);
-    StartTime = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0f;
-    UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] 🚀 StartPolling called! Initiating first HTTP tick..."));
-    
-    // Kick off the first request immediately
-    bIsWaitingForNextPoll = false;
-    PollTick();
-}
-
 void UBlsquiSDKComponent::PollTick()
 {
-    UE_LOG(LogTemp, Log, TEXT("==== [BlsquiSDK] PollTick Executing... ===="));
+    if (bIsCanceled)
+    {
+        return;
+    }
+
     UWorld* World = GetWorld();
     if (!World) return;
 
-    // Timeout Check (must use GetRealTimeSeconds here too!)
+    // Timeout Check
     if ((World->GetRealTimeSeconds() - StartTime) >= TIMEOUT_SECONDS)
     {
         if (bActiveVerbose)
@@ -105,31 +141,36 @@ void UBlsquiSDKComponent::PollTick()
 
         FTxResult TimeoutResult;
         TimeoutResult.Status = TEXT("TIMEOUT");
-        TimeoutResult.Error = FString::Printf(TEXT("Transaction poll timed out after %.0f seconds"), TIMEOUT_SECONDS);
+        TimeoutResult.Nonce = ActiveNonce;
+        TimeoutResult.Error = FString::Printf(TEXT("Transaction poll timed out after %.0f seconds."), TIMEOUT_SECONDS);
         CompleteTransaction(TimeoutResult);
         return;
     }
 
-    // Send HTTP GET Request
-    FString PollUrl = FString::Printf(TEXT("%s/api/status?nonce=%s"), *ActiveBaseUrl, *ActiveNonce);
-    
-    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = FHttpModule::Get().CreateRequest();
-    HttpRequest->SetVerb(TEXT("GET"));
-    HttpRequest->SetURL(PollUrl);
-    HttpRequest->OnProcessRequestComplete().BindUObject(this, &UBlsquiSDKComponent::OnPollResponseReceived);
-    HttpRequest->ProcessRequest();
+    CurrentHttpRequest = FHttpModule::Get().CreateRequest();
+    CurrentHttpRequest->SetVerb(TEXT("GET"));
+    CurrentHttpRequest->SetURL(ActivePollUrl);
+    CurrentHttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
+    CurrentHttpRequest->OnProcessRequestComplete().BindUObject(this, &UBlsquiSDKComponent::OnPollResponseReceived);
+    CurrentHttpRequest->ProcessRequest();
 }
 
 void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
+    CurrentHttpRequest.Reset();
+
+    if (bIsCanceled)
+    {
+        return;
+    }
+
     if (!bWasSuccessful || !Response.IsValid())
     {
         if (bActiveVerbose)
         {
             UE_LOG(LogTemp, Warning, TEXT("[BlsquiSDK Poll Request Error] HTTP request failed. Retrying..."));
         }
-        
-        // If it fails (network blip), tell the Tick function to try again in 1.5 seconds
+
         if (GetWorld())
         {
             LastPollTime = GetWorld()->GetRealTimeSeconds();
@@ -148,7 +189,7 @@ void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpR
 
         if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
         {
-            FString Status = JsonObject->GetStringField(TEXT("status"));
+            FString Status = JsonObject->GetStringField(TEXT("status")).ToUpper();
             if (Status.IsEmpty()) Status = TEXT("PENDING");
 
             if (bActiveVerbose)
@@ -156,60 +197,87 @@ void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpR
                 UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK Poll] HTTP 200 | Status: '%s' | JSON: %s"), *Status, *JsonText);
             }
 
-            FString UpperStatus = Status.ToUpper();
-            if (UpperStatus == TEXT("SEALED") || UpperStatus == TEXT("EXECUTED") || UpperStatus == TEXT("FINALIZED") || UpperStatus == TEXT("SUCCESS"))
+            if (Status == TEXT("SEALED"))
             {
+                FString ErrorMsg = JsonObject->HasField(TEXT("errorMessage")) ? JsonObject->GetStringField(TEXT("errorMessage")) : TEXT("");
+
+                if (!ErrorMsg.IsEmpty())
+                {
+                    FTxResult FailedResult;
+                    FailedResult.Status = TEXT("FAILED");
+                    FailedResult.TxId = JsonObject->GetStringField(TEXT("txId"));
+                    FailedResult.Nonce = ActiveNonce;
+                    FailedResult.Payer = JsonObject->GetStringField(TEXT("payer"));
+                    FailedResult.Error = TEXT("On-chain execution failed");
+                    FailedResult.ErrorMessage = ErrorMsg;
+                    CompleteTransaction(FailedResult);
+                    return;
+                }
+
                 if (bActiveVerbose)
                 {
                     UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] 🎉 Transaction Sealed! TX ID: %s"), *JsonObject->GetStringField(TEXT("txId")));
                 }
 
                 FTxResult SuccessResult;
-                SuccessResult.Status = Status;
+                SuccessResult.Status = TEXT("SEALED");
                 SuccessResult.TxId = JsonObject->GetStringField(TEXT("txId"));
-                // ... populate the rest of the struct ...
-
+                SuccessResult.Nonce = ActiveNonce;
+                SuccessResult.Payer = JsonObject->GetStringField(TEXT("payer"));
+                SuccessResult.To = JsonObject->GetStringField(TEXT("to"));
+                SuccessResult.Amount = JsonObject->HasField(TEXT("amount")) ? JsonObject->GetStringField(TEXT("amount")) : TEXT("0.0");
+                SuccessResult.Token = JsonObject->GetStringField(TEXT("token"));
                 CompleteTransaction(SuccessResult);
+                return;
             }
-            else if (UpperStatus == TEXT("EXPIRED"))
+            else if (Status == TEXT("EXPIRED"))
             {
+                if (bActiveVerbose)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[BlsquiSDK] Transaction EXPIRED on-chain."));
+                }
+
                 FTxResult ExpiredResult;
                 ExpiredResult.Status = TEXT("EXPIRED");
+                ExpiredResult.Nonce = ActiveNonce;
                 ExpiredResult.Error = TEXT("Transaction expired on-chain");
                 CompleteTransaction(ExpiredResult);
-            }
-            else if (Status == TEXT("PENDING"))
-            {
-                // =========================================================================
-                // STATUS IS 'PENDING': Tell the Tick function to wait 1.5 seconds, then fire again!
-                // =========================================================================
-                UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Status still PENDING. Re-scheduling PollTick in %.2f sec..."), POLL_INTERVAL_SECONDS);
-
-                if (GetWorld())
-                {
-                    LastPollTime = GetWorld()->GetRealTimeSeconds();
-                    bIsWaitingForNextPoll = true; 
-                }
+                return;
             }
         }
+    }
+    else if (bActiveVerbose)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[BlsquiSDK Poll] Non-200 HTTP response: %d"), ResponseCode);
+    }
+
+    // Still pending or recoverable error: schedule next poll
+    if (GetWorld())
+    {
+        LastPollTime = GetWorld()->GetRealTimeSeconds();
+        bIsWaitingForNextPoll = true;
     }
 }
 
 void UBlsquiSDKComponent::CompleteTransaction(const FTxResult& Result)
 {
-    // Stop the custom timer loop
+    bIsPollingActive = false;
     bIsWaitingForNextPoll = false;
+    SetComponentTickEnabled(false);
 
-    // Broadcast the result to any listening Blueprints or Widgets
     OnTransactionCompleted.Broadcast(Result);
 }
 
 FString UBlsquiSDKComponent::GenerateClientNonce()
 {
-    // Calls Unreal Engine’s built-in platform-agnostic Globally Unique Identifier (GUID / UUID v4) generator.
-    // Formats the GUID as a raw hexadecimal string without dashes or braces.
-    // Because one GUID produces 32 hex characters (128 bits), combining two back-to-back produces a 64-character hex string (256 bits).
-    FString FirstHalf = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    FString SecondHalf = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    return (FirstHalf + SecondHalf).ToLower();
+    // Generate 32 bytes of cryptographically secure randomness and compute SHA-256 (64-character lowercase hex)
+    TArray<uint8> RandomBytes;
+    RandomBytes.SetNumUninitialized(32);
+    FPlatformMisc::CreateGuid().ToByteArray(RandomBytes.GetData()); // Seed with Guid bytes
+    for (int32 i = 16; i < 32; ++i)
+    {
+        RandomBytes[i] = static_cast<uint8>(FMath::RandRange(0, 255));
+    }
+
+    return FSHA256::HashBuffer(RandomBytes.GetData(), RandomBytes.Num()).ToLower();
 }

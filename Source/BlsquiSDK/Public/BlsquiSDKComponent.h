@@ -5,26 +5,39 @@
 #include "Interfaces/IHttpRequest.h"
 #include "BlsquiSDKComponent.generated.h"
 
-// Blueprint structure representing the Flow Transaction Result
+// Options passed to RequestTransaction
+USTRUCT(BlueprintType)
+struct FBlsquiTxOptions
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blsqui SDK")
+    bool bIsTestnet = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blsqui SDK")
+    FString FlixId = TEXT("7d9d4b154547d7f6ec95e8b95741ed84663592d8c0016dbc4b28b6f9bf435ba5");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blsqui SDK")
+    TMap<FString, FString> Args;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blsqui SDK")
+    bool bVerbose = false;
+};
+
+// Flow Transaction Result
 USTRUCT(BlueprintType)
 struct FTxResult
 {
     GENERATED_BODY()
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
-    FString Status;
+    FString Status; // "SEALED", "FAILED", "EXPIRED", "TIMEOUT", "CANCELED"
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
     FString TxId;
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
-    FString Error;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
     FString Nonce;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
-    FString ErrorMessage;
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
     FString Payer;
@@ -37,9 +50,15 @@ struct FTxResult
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
     FString Token;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
+    FString Error;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
+    FString ErrorMessage;
 };
 
-// Event Dispatcher fired when a transaction finishes (Sealed, Expired, or Timeout)
+// Event Dispatcher for result notification
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTransactionCompleted, const FTxResult&, Result);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -51,28 +70,41 @@ public:
     UBlsquiSDKComponent();
 
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-    // Event Dispatcher that Blueprints can assign to
+
     UPROPERTY(BlueprintAssignable, Category = "Blsqui SDK")
     FOnTransactionCompleted OnTransactionCompleted;
 
     /**
-     * Primary Entry Point: Opens system browser and polls backend server for completion.
+     * Primary Entry Point: Launches browser gateway with FLIX params and polls backend for status.
      */
     UFUNCTION(BlueprintCallable, Category = "Blsqui SDK")
-    void RequestTransaction(float Amount, const FString& Destination, bool bIsTestnet = true, bool bVerbose = false);
+    void RequestTransaction(const FBlsquiTxOptions& Options);
+
+    /**
+     * Cancels any active polling loop.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Blsqui SDK")
+    void CancelTransaction();
 
 private:
-    const FString MAINNET_URL = TEXT("https://signer.blsqui.net");
-    const FString TESTNET_URL = TEXT("https://testnet-signer.blsqui.net");
+    const FString MAINNET_GATEWAY_URL = TEXT("https://wallet.blsqui.net/transaction");
+    const FString TESTNET_GATEWAY_URL = TEXT("https://lab.blsqui.net/transaction");
+    const FString MAINNET_POLL_API    = TEXT("https://wallet.blsqui.net/api/status");
+    const TESTNET_POLL_API_STRING     = TEXT("https://lab.blsqui.net/api/status");
+
     const float POLL_INTERVAL_SECONDS = 1.5f;
     const float TIMEOUT_SECONDS = 300.0f;
 
-    FString ActiveBaseUrl;
+    FString ActivePollUrl;
     FString ActiveNonce;
     bool bActiveVerbose;
-    float StartTime;
+    bool bIsCanceled;
+    bool bIsPollingActive;
     bool bIsWaitingForNextPoll;
+    float StartTime;
     float LastPollTime;
+
+    TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> CurrentHttpRequest;
 
     void StartPolling();
     void PollTick();

@@ -6,26 +6,23 @@ public class BlsquiSDK : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
+        // Exposed publicly through BlsquiSDKComponent.h
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
                 "Core",
                 "CoreUObject",
                 "Engine",
-                "InputCore",
-                "HTTP",          // Needed for Local Loopback & Cloudflare Worker requests
-                "Json",          // Needed for parsing transaction status responses
-                "JsonUtilities",
-                "UMG",           // Needed for displaying UI Dialogs
-                "Slate",
-                "SlateCore"
+                "HTTP"
             }
         );
 
+        // Used internally inside BlsquiSDKComponent.cpp
         PrivateDependencyModuleNames.AddRange(
             new string[]
             {
-                // Put any private internal module dependencies here if needed
+                "Json",
+                "JsonUtilities"
             }
         );
     }
