@@ -1,10 +1,10 @@
 #include "BlsquiSDKComponent.h"
+#include "Engine/World.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "Misc/SecureHash.h"
 #include "HAL/PlatformMisc.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "Misc/Guid.h"
@@ -29,12 +29,11 @@ void UBlsquiSDKComponent::RequestTransaction(const FBlsquiTxOptions& Options)
     ActiveNonce = GenerateClientNonce();
 
     FString BaseGatewayUrl = Options.bIsTestnet ? TESTNET_GATEWAY_URL : MAINNET_GATEWAY_URL;
-    FString BasePollApi    = Options.bIsTestnet ? TEXT("https://lab.blsqui.net/api/status") : MAINNET_POLL_API;
+    FString BasePollApi    = Options.bIsTestnet ? TESTNET_POLL_API : MAINNET_POLL_API;
     ActivePollUrl          = FString::Printf(TEXT("%s?nonce=%s"), *BasePollApi, *FGenericPlatformHttp::UrlEncode(ActiveNonce));
 
     int64 CurrentTime = FDateTime::UtcNow().ToUnixTimestamp();
 
-    // Construct query parameters
     TArray<FString> QueryParts;
     QueryParts.Add(FString::Printf(TEXT("flix=%s"), *FGenericPlatformHttp::UrlEncode(Options.FlixId)));
     QueryParts.Add(FString::Printf(TEXT("issued_time=%lld"), CurrentTime));
@@ -60,10 +59,7 @@ void UBlsquiSDKComponent::RequestTransaction(const FBlsquiTxOptions& Options)
         UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Nonce: %s"), *ActiveNonce);
     }
 
-    // Launch system browser
     FPlatformProcess::LaunchURL(*FullUrl, nullptr, nullptr);
-
-    // Start background polling loop
     StartPolling();
 }
 
@@ -131,7 +127,6 @@ void UBlsquiSDKComponent::PollTick()
     UWorld* World = GetWorld();
     if (!World) return;
 
-    // Timeout Check
     if ((World->GetRealTimeSeconds() - StartTime) >= TIMEOUT_SECONDS)
     {
         if (bActiveVerbose)
@@ -151,7 +146,18 @@ void UBlsquiSDKComponent::PollTick()
     CurrentHttpRequest->SetVerb(TEXT("GET"));
     CurrentHttpRequest->SetURL(ActivePollUrl);
     CurrentHttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
-    CurrentHttpRequest->OnProcessRequestComplete().BindUObject(this, &UBlsquiSDKComponent::OnPollResponseReceived);
+
+    TWeakObjectPtr<UBlsquiSDKComponent> WeakThis(this);
+    CurrentHttpRequest->OnProcessRequestComplete().BindLambda(
+        [WeakThis](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+        {
+            if (UBlsquiSDKComponent* StrongThis = WeakThis.Get())
+            {
+                StrongThis->OnPollResponseReceived(Request, Response, bWasSuccessful);
+            }
+        }
+    );
+
     CurrentHttpRequest->ProcessRequest();
 }
 
@@ -251,7 +257,6 @@ void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpR
         UE_LOG(LogTemp, Warning, TEXT("[BlsquiSDK Poll] Non-200 HTTP response: %d"), ResponseCode);
     }
 
-    // Still pending or recoverable error: schedule next poll
     if (GetWorld())
     {
         LastPollTime = GetWorld()->GetRealTimeSeconds();
@@ -270,7 +275,6 @@ void UBlsquiSDKComponent::CompleteTransaction(const FTxResult& Result)
 
 FString UBlsquiSDKComponent::GenerateClientNonce()
 {
-    // Generates a 64-character (256-bit) unique lowercase hex string matching Godot and Unity nonces
     FString Part1 = FGuid::NewGuid().ToString(EGuidFormats::Digits);
     FString Part2 = FGuid::NewGuid().ToString(EGuidFormats::Digits);
     return (Part1 + Part2).ToLower();

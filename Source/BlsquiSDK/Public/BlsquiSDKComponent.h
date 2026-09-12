@@ -90,7 +90,7 @@ private:
     const FString MAINNET_GATEWAY_URL = TEXT("https://wallet.blsqui.net/transaction");
     const FString TESTNET_GATEWAY_URL = TEXT("https://lab.blsqui.net/transaction");
     const FString MAINNET_POLL_API    = TEXT("https://wallet.blsqui.net/api/status");
-    const TESTNET_POLL_API_STRING     = TEXT("https://lab.blsqui.net/api/status");
+    const FString TESTNET_POLL_API    = TEXT("https://lab.blsqui.net/api/status");
 
     const float POLL_INTERVAL_SECONDS = 1.5f;
     const float TIMEOUT_SECONDS = 300.0f;
@@ -108,10 +108,7 @@ private:
 
     void StartPolling();
     void PollTick();
-
-    UFUNCTION()
     void OnPollResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
-
     FString GenerateClientNonce();
     void CompleteTransaction(const FTxResult& Result);
 };
