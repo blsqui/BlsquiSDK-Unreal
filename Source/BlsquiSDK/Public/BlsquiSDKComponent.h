@@ -108,7 +108,10 @@ private:
 
     void StartPolling();
     void PollTick();
+
+    UFUNCTION()
     void OnPollResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
+
     FString GenerateClientNonce();
     void CompleteTransaction(const FTxResult& Result);
 };

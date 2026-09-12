@@ -270,14 +270,8 @@ void UBlsquiSDKComponent::CompleteTransaction(const FTxResult& Result)
 
 FString UBlsquiSDKComponent::GenerateClientNonce()
 {
-    // Generate 32 bytes of cryptographically secure randomness and compute SHA-256 (64-character lowercase hex)
-    TArray<uint8> RandomBytes;
-    RandomBytes.SetNumUninitialized(32);
-    FPlatformMisc::CreateGuid().ToByteArray(RandomBytes.GetData()); // Seed with Guid bytes
-    for (int32 i = 16; i < 32; ++i)
-    {
-        RandomBytes[i] = static_cast<uint8>(FMath::RandRange(0, 255));
-    }
-
-    return FSHA256::HashBuffer(RandomBytes.GetData(), RandomBytes.Num()).ToLower();
+    // Generates a 64-character (256-bit) unique lowercase hex string matching Godot and Unity nonces
+    FString Part1 = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    FString Part2 = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    return (Part1 + Part2).ToLower();
 }
