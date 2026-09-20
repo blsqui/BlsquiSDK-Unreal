@@ -52,6 +52,9 @@ struct FTxResult
     FString Token;
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
+    FString TxFee;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
     FString Error;
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui SDK")
@@ -75,29 +78,33 @@ public:
     FOnTransactionCompleted OnTransactionCompleted;
 
     /**
-     * Primary Entry Point: Launches browser gateway with FLIX params and polls backend for status.
+     * Primary Entry Point: Requests a signed session token, launches the browser gateway, and polls backend for status.
      */
     UFUNCTION(BlueprintCallable, Category = "Blsqui SDK")
     void RequestTransaction(const FBlsquiTxOptions& Options);
 
     /**
-     * Cancels any active polling loop.
+     * Cancels any active signing or polling loop.
      */
     UFUNCTION(BlueprintCallable, Category = "Blsqui SDK")
     void CancelTransaction();
 
 private:
-    const FString MAINNET_GATEWAY_URL = TEXT("https://wallet.blsqui.net/transaction");
-    const FString TESTNET_GATEWAY_URL = TEXT("https://lab.blsqui.net/transaction");
-    const FString MAINNET_POLL_API    = TEXT("https://wallet.blsqui.net/api/status");
-    const FString TESTNET_POLL_API    = TEXT("https://lab.blsqui.net/api/status");
+    const FString MAINNET_GATEWAY_URL      = TEXT("https://wallet.blsqui.net/transaction");
+    const FString TESTNET_GATEWAY_URL      = TEXT("https://lab.blsqui.net/transaction");
+    const FString MAINNET_SESSION_SIGN_API = TEXT("https://wallet.blsqui.net/api/session/sign");
+    const FString TESTNET_SESSION_SIGN_API = TEXT("https://lab.blsqui.net/api/session/sign");
+    const FString MAINNET_POLL_API         = TEXT("https://wallet.blsqui.net/api/status");
+    const FString TESTNET_POLL_API         = TEXT("https://lab.blsqui.net/api/status");
 
     const float POLL_INTERVAL_SECONDS = 1.5f;
     const float TIMEOUT_SECONDS = 300.0f;
 
+    FString ActiveGatewayBaseUrl;
     FString ActivePollUrl;
     FString ActiveNonce;
     bool bActiveVerbose;
+    bool bIsTestnetActive;
     bool bIsCanceled;
     bool bIsPollingActive;
     bool bIsWaitingForNextPoll;
@@ -106,6 +113,8 @@ private:
 
     TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> CurrentHttpRequest;
 
+    void RequestSessionToken(const FBlsquiTxOptions& Options, const FString& Nonce, int64 CurrentTime);
+    void OnSessionSignResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
     void StartPolling();
     void PollTick();
     void OnPollResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);

@@ -104,6 +104,7 @@ struct FTxResult
     FString To;            // Recipient account address
     FString Amount;        // Executed payment amount (Cadence UFix64 string)
     FString Token;         // Token identifier (e.g., "FlowToken")
+    FString TxFee;         // Gas fee deducted on-chain (Cadence UFix64 string)
     FString Error;         // Client-side error description
     FString ErrorMessage;  // Detailed Cadence runtime error message from the node
 };

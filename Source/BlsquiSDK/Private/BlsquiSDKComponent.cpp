@@ -20,46 +20,144 @@ UBlsquiSDKComponent::UBlsquiSDKComponent()
     LastPollTime = 0.0f;
     StartTime = 0.0f;
     bActiveVerbose = false;
+    bIsTestnetActive = true;
 }
 
 void UBlsquiSDKComponent::RequestTransaction(const FBlsquiTxOptions& Options)
 {
     bIsCanceled = false;
     bActiveVerbose = Options.bVerbose;
+    bIsTestnetActive = Options.bIsTestnet;
     ActiveNonce = GenerateClientNonce();
 
-    FString BaseGatewayUrl = Options.bIsTestnet ? TESTNET_GATEWAY_URL : MAINNET_GATEWAY_URL;
-    FString BasePollApi    = Options.bIsTestnet ? TESTNET_POLL_API : MAINNET_POLL_API;
-    ActivePollUrl          = FString::Printf(TEXT("%s?nonce=%s"), *BasePollApi, *FGenericPlatformHttp::UrlEncode(ActiveNonce));
+    ActiveGatewayBaseUrl = Options.bIsTestnet ? TESTNET_GATEWAY_URL : MAINNET_GATEWAY_URL;
+    FString BasePollApi = Options.bIsTestnet ? TESTNET_POLL_API : MAINNET_POLL_API;
+    ActivePollUrl = FString::Printf(TEXT("%s?nonce=%s"), *BasePollApi, *FGenericPlatformHttp::UrlEncode(ActiveNonce));
 
     int64 CurrentTime = FDateTime::UtcNow().ToUnixTimestamp();
 
-    TArray<FString> QueryParts;
-    QueryParts.Add(FString::Printf(TEXT("flix=%s"), *FGenericPlatformHttp::UrlEncode(Options.FlixId)));
-    QueryParts.Add(FString::Printf(TEXT("issued_time=%lld"), CurrentTime));
-    QueryParts.Add(FString::Printf(TEXT("nonce=%s"), *FGenericPlatformHttp::UrlEncode(ActiveNonce)));
+    // Request signed session token
+    RequestSessionToken(Options, ActiveNonce, CurrentTime);
+}
+
+void UBlsquiSDKComponent::RequestSessionToken(const FBlsquiTxOptions& Options, const FString& Nonce, int64 CurrentTime)
+{
+    FString SignApiUrl = Options.bIsTestnet ? TESTNET_SESSION_SIGN_API : MAINNET_SESSION_SIGN_API;
+
+    TSharedPtr<FJsonObject> JsonPayload = MakeShared<FJsonObject>();
+    JsonPayload->SetStringField(TEXT("flix"), Options.FlixId);
+    JsonPayload->SetNumberField(TEXT("issued_time"), CurrentTime);
+    JsonPayload->SetStringField(TEXT("nonce"), Nonce);
 
     for (const TPair<FString, FString>& Pair : Options.Args)
     {
         FString TrimmedVal = Pair.Value.TrimStartAndEnd();
         if (!TrimmedVal.IsEmpty())
         {
-            QueryParts.Add(FString::Printf(TEXT("%s=%s"), 
-                *FGenericPlatformHttp::UrlEncode(Pair.Key), 
-                *FGenericPlatformHttp::UrlEncode(TrimmedVal)));
+            JsonPayload->SetStringField(Pair.Key, TrimmedVal);
         }
     }
 
-    FString FullUrl = FString::Printf(TEXT("%s?%s"), *BaseGatewayUrl, *FString::Join(QueryParts, TEXT("&")));
+    FString RequestBody;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RequestBody);
+    FJsonSerializer::Serialize(JsonPayload.ToSharedRef(), Writer);
+
+    CurrentHttpRequest = FHttpModule::Get().CreateRequest();
+    CurrentHttpRequest->SetVerb(TEXT("POST"));
+    CurrentHttpRequest->SetURL(SignApiUrl);
+    CurrentHttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    CurrentHttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
+    CurrentHttpRequest->SetContentAsString(RequestBody);
+
+    TWeakObjectPtr<UBlsquiSDKComponent> WeakThis(this);
+    CurrentHttpRequest->OnProcessRequestComplete().BindLambda(
+        [WeakThis](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+        {
+            if (UBlsquiSDKComponent* StrongThis = WeakThis.Get())
+            {
+                StrongThis->OnSessionSignResponseReceived(Request, Response, bWasSuccessful);
+            }
+        }
+    );
+
+    CurrentHttpRequest->ProcessRequest();
+}
+
+void UBlsquiSDKComponent::OnSessionSignResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+{
+    CurrentHttpRequest.Reset();
+
+    if (bIsCanceled)
+    {
+        return;
+    }
+
+    if (!bWasSuccessful || !Response.IsValid())
+    {
+        FTxResult ErrorResult;
+        ErrorResult.Status = TEXT("FAILED");
+        ErrorResult.Nonce = ActiveNonce;
+        ErrorResult.Error = TEXT("Failed to sign transaction session: HTTP request failed");
+        CompleteTransaction(ErrorResult);
+        return;
+    }
+
+    int32 ResponseCode = Response->GetResponseCode();
+    FString BodyText = Response->GetContentAsString();
+
+    TSharedPtr<FJsonObject> JsonObject;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(BodyText);
+
+    if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
+    {
+        FTxResult ErrorResult;
+        ErrorResult.Status = TEXT("FAILED");
+        ErrorResult.Nonce = ActiveNonce;
+        ErrorResult.Error = FString::Printf(TEXT("Failed to sign transaction session: Invalid JSON (HTTP %d)"), ResponseCode);
+        CompleteTransaction(ErrorResult);
+        return;
+    }
+
+    if (ResponseCode < 200 || ResponseCode >= 300)
+    {
+        FString ErrorMsg = JsonObject->HasField(TEXT("error")) ? JsonObject->GetStringField(TEXT("error")) : FString::Printf(TEXT("HTTP_%d"), ResponseCode);
+        if (bActiveVerbose)
+        {
+            UE_LOG(LogTemp, Error, TEXT("[BlsquiSDK] Session token signing failed: %s"), *ErrorMsg);
+        }
+
+        FTxResult ErrorResult;
+        ErrorResult.Status = TEXT("FAILED");
+        ErrorResult.Nonce = ActiveNonce;
+        ErrorResult.Error = FString::Printf(TEXT("Failed to sign transaction session: %s"), *ErrorMsg);
+        CompleteTransaction(ErrorResult);
+        return;
+    }
+
+    FString SignedToken = JsonObject->GetStringField(TEXT("token"));
+    if (SignedToken.IsEmpty())
+    {
+        FTxResult ErrorResult;
+        ErrorResult.Status = TEXT("FAILED");
+        ErrorResult.Nonce = ActiveNonce;
+        ErrorResult.Error = TEXT("Failed to sign transaction session: Response missing signed token");
+        CompleteTransaction(ErrorResult);
+        return;
+    }
+
+    // Build tamper-proof URL and launch system browser
+    FString FullUrl = FString::Printf(TEXT("%s?request=%s"), *ActiveGatewayBaseUrl, *FGenericPlatformHttp::UrlEncode(SignedToken));
 
     if (bActiveVerbose)
     {
-        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Mode: Unreal Native Browser [%s]"), Options.bIsTestnet ? TEXT("TESTNET") : TEXT("MAINNET"));
+        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Mode: Unreal Native Browser [%s]"), bIsTestnetActive ? TEXT("TESTNET") : TEXT("MAINNET"));
         UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Wallet Gateway URL: %s"), *FullUrl);
         UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Nonce: %s"), *ActiveNonce);
     }
 
     FPlatformProcess::LaunchURL(*FullUrl, nullptr, nullptr);
+
+    // Step 3: Begin polling backend
     StartPolling();
 }
 
@@ -225,6 +323,16 @@ void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpR
                     UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] 🎉 Transaction Sealed! TX ID: %s"), *JsonObject->GetStringField(TEXT("txId")));
                 }
 
+                FString FeeVal = TEXT("");
+                if (JsonObject->HasField(TEXT("txFee")))
+                {
+                    FeeVal = JsonObject->GetStringField(TEXT("txFee"));
+                }
+                else if (JsonObject->HasField(TEXT("tx_fee")))
+                {
+                    FeeVal = JsonObject->GetStringField(TEXT("tx_fee"));
+                }
+
                 FTxResult SuccessResult;
                 SuccessResult.Status = TEXT("SEALED");
                 SuccessResult.TxId = JsonObject->GetStringField(TEXT("txId"));
@@ -233,6 +341,7 @@ void UBlsquiSDKComponent::OnPollResponseReceived(FHttpRequestPtr Request, FHttpR
                 SuccessResult.To = JsonObject->GetStringField(TEXT("to"));
                 SuccessResult.Amount = JsonObject->HasField(TEXT("amount")) ? JsonObject->GetStringField(TEXT("amount")) : TEXT("0.0");
                 SuccessResult.Token = JsonObject->GetStringField(TEXT("token"));
+                SuccessResult.TxFee = FeeVal;
                 CompleteTransaction(SuccessResult);
                 return;
             }
