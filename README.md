@@ -2,6 +2,8 @@
 
 The official Unreal Engine C++ plugin for **Blsqui** — enabling seamless Flow blockchain payments, Passkey wallet authentication, and microtransactions in Unreal Engine games.
 
+> **Engine-Agnostic Core:** While this plugin is configured out of the box for Unreal Engine 5, the core Flow Cadence execution and StageSlot parsing logic runs on **standard C++17/C++20 without requiring Unreal Engine headers** (`CoreMinimal.h`, `UObject`, etc.). Standalone implementation samples for custom C++ game engines or Godot GDExtension are included under `Samples/Standalone/`.
+
 ## Features
 - **Passkey & WebAuthn Ready:** Launches the system browser directly to the Blsqui Gateway for one-touch biometric signing.
 - **Edge Polling Engine:** Asynchronous, non-blocking HTTP polling against Blsqui edge nodes until on-chain finality without freezing game threads or UI.
