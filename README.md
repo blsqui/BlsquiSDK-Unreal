@@ -11,8 +11,9 @@ The official Unreal Engine C++ plugin for **Blsqui** — enabling seamless Flow 
 - **Edge Polling Engine:** Asynchronous, non-blocking HTTP polling against Blsqui edge nodes until on-chain finality without freezing game threads or UI.
 - **FLIX Native:** Built-in support for Flow Interaction Templates with arbitrary Cadence script arguments.
 - **Dual Architecture (Unreal & Standalone C++):** Modular design pattern allowing identical Web3 functionality across Unreal Engine (UMG/Blueprints) and headless/custom C++ game engines.
-
-## 📦 Installation & Setup
+<br>
+<br>
+# 📦 Installation & Setup
 
 1. Download or clone this repository.
 2. Copy the `BlsquiSDK` folder into your Unreal Engine project's `Plugins/` directory:
@@ -82,8 +83,10 @@ void AYourPlayerController::HandlePaymentCompleted(const FTxResult& Result)
     }
 }
 ```
+<br>
+<br>
 
-## ⚡ Real-Time WebRTC Item Usage Flow
+# ⚡ Real-Time WebRTC Item Usage Flow
 The SDK links equipped on-chain stage slots with web dashboards. When a player triggers an action in-game or confirms an item usage on their external tab, the SDK completes the loop automatically:
 
 ```
@@ -109,10 +112,12 @@ if (UBlsquiCurrentUser* CurrentUser = GetGameInstance()->GetSubsystem<UBlsquiCur
     CurrentUser->RequestUseItem(TEXT("shd_valkyrie_aegis_b"));
 }
 ```
+<br>
+<br>
 
-## 📂 Sample Implementations
+# 📂 Sample Implementations
 Reference implementations are organized under `Samples/`:
-### 1. Unreal Engine Samples (`Samples/Unreal/`)
+## Unreal Engine Samples (`Samples/Unreal/`)
 - `ShopButtonHandler`: Direct FLIX-templated shop microtransactions and receipt formatting.
 
 - `UseItemButtonHandler`: Triggers WebRTC item action and automatically runs the dynamic `ITEM_USE_REQUESTED` transaction.
@@ -121,7 +126,7 @@ Reference implementations are organized under `Samples/`:
 
 - `ScoutButtonHandler`: Queries on-chain item slots of opponents using Cadence scripts.
 
-### Standalone C++ Samples (`Samples/Standalone/`)
+## Standalone C++ Samples (`Samples/Standalone/`)
 Standard C++17 implementations without any Unreal dependencies (`UObject`, `FString`, `TArray`):
 - `BlsquiStageSlotSample.h / .cpp`: Raw JSON-CDC Cadence response parser for Flow Access Node queries.
 
@@ -131,8 +136,9 @@ Standard C++17 implementations without any Unreal dependencies (`UObject`, `FStr
 
 - `HubButtonHandlerStandalone.h / .cpp`: Cross-platform system browser URL generation and callback dispatch.
 
-
-## Configuration Reference
+<br>
+<br>
+# Configuration Reference
 ### `FBlsquiTxOptions`
 Pass this struct into `Blsqui->RequestTransaction(Options)`:
 | Field | Type | Default | Description |
@@ -175,11 +181,15 @@ struct FTxResult
 
  - `CANCELED`: Polling was stopped manually via `Blsqui->CancelTransaction()`.
 
+<br>
+<br>
 
 ## Requirements
 - Unreal Engine **5.0** or higher
 - Standard C++ project setup (Visual Studio 2022, Xcode, or JetBrains Rider)
 - Active internet connection
+<br>
+<br>
 
 ## License
 MIT License - see [LICENSE](LICENSE) for details.
