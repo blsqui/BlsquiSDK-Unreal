@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
   "Version": 1,
-  "VersionName": "1.2.1",
+  "VersionName": "2.0.0",
   "FriendlyName": "Blsqui SDK",
   "Description": "Official Unreal Engine 5 SDK for Blsqui — Flow blockchain payment and wallet integration for Unreal Engine",
   "Category": "Payment",

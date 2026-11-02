@@ -27,16 +27,37 @@ struct FStageSlotOptions
 };
 
 USTRUCT(BlueprintType)
-struct FStageSlotItem
-{
-    GENERATED_BODY()
-
-    UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
-    int32 SlotIndex = 0;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
-    FString ItemId;
-};
+ struct FStageSlotItem
+ {
+     GENERATED_BODY()
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     int32 SlotIndex = 0;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString ItemId;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString ItemName;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString Icon;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString Category;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     int32 RemainingCharges = 0;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     int32 MaxCharges = 0;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString FlixId;
+ 
+     UPROPERTY(BlueprintReadOnly, Category = "Blsqui StageSlot")
+     FString PublisherAddress;
+ };
 
 // Asynchronous delegate fired when the REST call completes
 DECLARE_DYNAMIC_DELEGATE_TwoParams(FOnStageSlotsResolved, const TArray<FStageSlotItem>&, Items, bool, bSuccess);

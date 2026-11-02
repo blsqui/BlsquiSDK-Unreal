@@ -1,3 +1,4 @@
+using System.IO;
 using UnrealBuildTool;
 
 public class BlsquiSDK : ModuleRules
@@ -6,24 +7,49 @@ public class BlsquiSDK : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        // Exposed publicly through BlsquiSDKComponent.h
+        string ThirdPartyPath = Path.Combine(ModuleDirectory, "ThirdParty", "libdatachannel");
+
+        PublicIncludePaths.AddRange(
+            new string[] {
+                Path.Combine(ModuleDirectory, "Public"),
+                Path.Combine(ThirdPartyPath, "include")
+            }
+        );
+
+        PrivateIncludePaths.AddRange(
+            new string[] {
+                Path.Combine(ModuleDirectory, "Private")
+            }
+        );
+
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
                 "Core",
                 "CoreUObject",
                 "Engine",
-                "HTTP"
+                "HTTP",
+                "Json",
+                "JsonUtilities",
+                "Projects"
             }
         );
 
-        // Used internally inside BlsquiSDKComponent.cpp
-        PrivateDependencyModuleNames.AddRange(
-            new string[]
+        if (Target.Platform == UnrealTargetPlatform.Mac)
+        {
+            string DylibPath = Path.Combine(ThirdPartyPath, "lib", "Mac", "libdatachannel.dylib");
+            if (File.Exists(DylibPath))
             {
-                "Json",
-                "JsonUtilities"
+                PublicAdditionalLibraries.Add(DylibPath);
+                RuntimeDependencies.Add(DylibPath);
             }
-        );
+
+            PublicFrameworks.AddRange(
+                new string[] {
+                    "Security",
+                    "CoreFoundation"
+                }
+            );
+        }
     }
 }

@@ -1,17 +1,42 @@
-#include "Modules/ModuleManager.h"
+#include "BlsquiSDKModule.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/Paths.h"
+#include "HAL/PlatformProcess.h"
 
-class FBlsquiSDKModule : public IModuleInterface
+#define LOCTEXT_NAMESPACE "FBlsquiSDKModule"
+
+static void* LibDataChannelHandle = nullptr;
+
+void FBlsquiSDKModule::StartupModule()
 {
-public:
-    virtual void StartupModule() override
-    {
-        // Executed when the plugin is loaded into memory
-    }
+#if PLATFORM_MAC
+    // Resolve absolute path to bundled libdatachannel.dylib
+    FString BaseDir = IPluginManager::Get().FindPlugin("BlsquiSDK")->GetBaseDir();
+    FString LibraryPath = FPaths::Combine(*BaseDir, TEXT("Source/BlsquiSDK/ThirdParty/libdatachannel/lib/Mac/libdatachannel.dylib"));
 
-    virtual void ShutdownModule() override
+    LibDataChannelHandle = FPlatformProcess::GetDllHandle(*LibraryPath);
+    if (LibDataChannelHandle)
     {
-        // Executed when the plugin is unloaded
+        UE_LOG(LogTemp, Log, TEXT("[BlsquiSDK] Successfully loaded libdatachannel.dylib from: %s"), *LibraryPath);
     }
-};
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("[BlsquiSDK] Failed to load libdatachannel.dylib from: %s"), *LibraryPath);
+    }
+#endif
+}
+
+void FBlsquiSDKModule::ShutdownModule()
+{
+#if PLATFORM_MAC
+    if (LibDataChannelHandle)
+    {
+        FPlatformProcess::FreeDllHandle(LibDataChannelHandle);
+        LibDataChannelHandle = nullptr;
+    }
+#endif
+}
+
+#undef LOCTEXT_NAMESPACE
 
 IMPLEMENT_MODULE(FBlsquiSDKModule, BlsquiSDK)
