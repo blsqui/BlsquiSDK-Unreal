@@ -6,9 +6,11 @@ The official Unreal Engine C++ plugin for **Blsqui** — enabling seamless Flow 
 
 ## Features
 - **Passkey & WebAuthn Ready:** Launches the system browser directly to the Blsqui Gateway for one-touch biometric signing.
+- **Real-Time WebRTC Presence & Session Sync:** Live bidirectional DataChannel communication between the game client and the player's web dashboard for inventory sync and item activation.
+- **Dynamic Slot & Item Actions:** Built-in protocol support for `TRIGGER_ITEM_ACTION`, `SLOT_SYNC`, and auto-dispatched `ITEM_USE_REQUESTED` transactions with Cadence arguments.
 - **Edge Polling Engine:** Asynchronous, non-blocking HTTP polling against Blsqui edge nodes until on-chain finality without freezing game threads or UI.
 - **FLIX Native:** Built-in support for Flow Interaction Templates with arbitrary Cadence script arguments.
-- **Clean C++ Architecture:** Zero forced UI assets or heavy Blueprint dependencies, designed for direct integration into production game loops.
+- **Dual Architecture (Unreal & Standalone C++):** Modular design pattern allowing identical Web3 functionality across Unreal Engine (UMG/Blueprints) and headless/custom C++ game engines.
 
 ## 📦 Installation & Setup
 
@@ -80,6 +82,55 @@ void AYourPlayerController::HandlePaymentCompleted(const FTxResult& Result)
     }
 }
 ```
+
+## ⚡ Real-Time WebRTC Item Usage Flow
+The SDK links equipped on-chain stage slots with web dashboards. When a player triggers an action in-game or confirms an item usage on their external tab, the SDK completes the loop automatically:
+
+```
+[In-Game Button (DEF/ATK)] 
+       │
+       ▼ (RequestUseItem)
+[WebRTC DataChannel] ────► [Blsqui Dashboard]
+                                  │ (User approves item usage)
+                                  ▼
+[OnItemUseRequested] ◄──── [WebRTC DataChannel]
+       │
+       ▼ (Auto-constructs FBlsquiTxOptions with FlixId, itemId, serialNumber)
+[BlsquiSDKComponent::RequestTransaction]
+       │
+       ▼
+[OnTransactionCompleted] ──► [ShowResultModal UI]
+```
+In-Game Item Trigger Example
+```cpp
+// Request to use an equipped item slot (e.g. Shield or Weapon)
+if (UBlsquiCurrentUser* CurrentUser = GetGameInstance()->GetSubsystem<UBlsquiCurrentUser>())
+{
+    CurrentUser->RequestUseItem(TEXT("shd_valkyrie_aegis_b"));
+}
+```
+
+## 📂 Sample Implementations
+Reference implementations are organized under `Samples/`:
+### 1. Unreal Engine Samples (`Samples/Unreal/`)
+- `ShopButtonHandler`: Direct FLIX-templated shop microtransactions and receipt formatting.
+
+- `UseItemButtonHandler`: Triggers WebRTC item action and automatically runs the dynamic `ITEM_USE_REQUESTED` transaction.
+
+- `HubButtonHandler`: Launches the web dashboard with player address context and updates slot inventory labels.
+
+- `ScoutButtonHandler`: Queries on-chain item slots of opponents using Cadence scripts.
+
+### Standalone C++ Samples (`Samples/Standalone/`)
+Standard C++17 implementations without any Unreal dependencies (`UObject`, `FString`, `TArray`):
+- `BlsquiStageSlotSample.h / .cpp`: Raw JSON-CDC Cadence response parser for Flow Access Node queries.
+
+- `ShopButtonHandlerStandalone.h / .cpp`: Standard C++ transaction options dispatch and modal text formatting.
+
+- `UseItemButtonHandler.h / .cpp`: Event-driven standard C++ handler mapping WebRTC payload inputs to transaction options.
+
+- `HubButtonHandlerStandalone.h / .cpp`: Cross-platform system browser URL generation and callback dispatch.
+
 
 ## Configuration Reference
 ### `FBlsquiTxOptions`
