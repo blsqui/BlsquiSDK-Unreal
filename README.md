@@ -13,6 +13,7 @@ The official Unreal Engine C++ plugin for **Blsqui** — enabling seamless Flow 
 - **Dual Architecture (Unreal & Standalone C++):** Modular design pattern allowing identical Web3 functionality across Unreal Engine (UMG/Blueprints) and headless/custom C++ game engines.
 <br>
 <br>
+
 # 📦 Installation & Setup
 
 1. Download or clone this repository.
@@ -138,6 +139,7 @@ Standard C++17 implementations without any Unreal dependencies (`UObject`, `FStr
 
 <br>
 <br>
+
 # Configuration Reference
 ### `FBlsquiTxOptions`
 Pass this struct into `Blsqui->RequestTransaction(Options)`:
