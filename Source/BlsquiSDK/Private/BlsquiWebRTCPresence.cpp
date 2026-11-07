@@ -75,6 +75,8 @@ void UBlsquiWebRTCPresence::InitPresence(const FString& PlayerAddress, const FSt
                 UE_LOG(LogTemp, Log, TEXT("✅ [UE5 WebRTC DataChannel OPEN]"));
                 WeakThis->State.bConnected = true;
                 WeakThis->OnStateChanged.Broadcast(WeakThis->State);
+
+                WeakThis->PingDashboard();
             }
         });
     });
@@ -281,4 +283,38 @@ void UBlsquiWebRTCPresence::Cleanup()
     State.bConnected = false;
     State.bGameOnline = false;
     State.bCanUseItem = false;
+}
+
+void UBlsquiWebRTCPresence::PingDashboard()
+{
+    if (!DataChannel || !DataChannel->isOpen())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Blsqui WebRTC] Cannot ping: DataChannel is not open."));
+        return;
+    }
+
+    FString PingJson = FString::Printf(
+        TEXT("{\"type\":\"%s\",\"role\":\"%s\",\"player\":\"%s\",\"timestamp\":%lld}"),
+        TEXT("PRESENCE_PING"),
+        TEXT("game"),
+        *ActiveAddress.ToLower(),
+        FDateTime::UtcNow().ToUnixTimestamp() * 1000
+    );
+
+    SendData(PingJson);
+}
+
+void UBlsquiWebRTCPresence::VerifyOrReconnect(const FString& PlayerAddress)
+{
+    if (DataChannel && DataChannel->isOpen() && State.bConnected)
+    {
+        // Channel is alive: send ping immediately to force dashboard to push slots
+        PingDashboard();
+    }
+    else
+    {
+        // Connection dropped or never completed: re-initiate signaling
+        UE_LOG(LogTemp, Log, TEXT("[Blsqui WebRTC] Connection inactive on Hub open. Re-initializing..."));
+        InitPresence(PlayerAddress, TEXT("game"));
+    }
 }

@@ -36,6 +36,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Blsqui|WebRTC")
     void Cleanup();
 
+    /** Sends a PRESENCE_PING over the DataChannel to request state sync from dashboard */
+    UFUNCTION(BlueprintCallable, Category = "Blsqui|WebRTC")
+    void PingDashboard();
+
+    /** Checks connection status and re-establishes if disconnected */
+    UFUNCTION(BlueprintCallable, Category = "Blsqui|WebRTC")
+    void VerifyOrReconnect(const FString& PlayerAddress);
+
     UFUNCTION(BlueprintPure, Category = "Blsqui|WebRTC")
     FPresenceState GetState() const { return State; }
 
@@ -43,6 +51,7 @@ private:
     const FString SIGNALING_API = TEXT("https://api.blsqui-signer.net/api/rtc/session");
 
     FPresenceState State;
+    FTimerHandle PingRetryTimerHandle;
     FString ActiveAddress;
     bool bIsConnecting = false;
 
