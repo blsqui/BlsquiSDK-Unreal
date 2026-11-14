@@ -7,17 +7,16 @@ The official Unreal Engine C++ plugin for **Blsqui** — enabling seamless Flow 
 ## Features
 - **Passkey & WebAuthn Ready:** Launches the system browser directly to the Blsqui Gateway for one-touch biometric signing.
 - **Real-Time WebRTC Presence & Session Sync:** Live bidirectional DataChannel communication between the game client and the player's web dashboard for inventory sync and item activation.
-- **Dynamic Slot & Item Actions:** Built-in protocol support for `TRIGGER_ITEM_ACTION`, `SLOT_SYNC`, and auto-dispatched `ITEM_USE_REQUESTED` transactions with Cadence arguments.
+- **Dynamic Slot & Item Actions:** Built-in protocol support for `TRIGGER_ITEM_ACTION`, `SLOT_SYNC`, and auto-dispatched `ITEM_USE_REQUESTED` transactions with publisher- and app-scoped Cadence arguments.
 - **Edge Polling Engine:** Asynchronous, non-blocking HTTP polling against Blsqui edge nodes until on-chain finality without freezing game threads or UI.
 - **FLIX Native:** Built-in support for Flow Interaction Templates with arbitrary Cadence script arguments.
 - **Dual Architecture (Unreal & Standalone C++):** Modular design pattern allowing identical Web3 functionality across Unreal Engine (UMG/Blueprints) and headless/custom C++ game engines.
-<br>
+
 <br>
 
 # 📦 Installation & Setup
 
-1. Download or clone this repository.
-2. Copy the `BlsquiSDK` folder into your Unreal Engine project's `Plugins/` directory:
+1. Download or clone this repository into your Unreal Engine project's `Plugins/` directory:
 ```text
 YourProject/
 └── Plugins/
@@ -27,12 +26,38 @@ YourProject/
 ```csharp
 PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "BlsquiSDK" });
 ```
-4. Regenerate project files (right-click `.uproject` -> Generate Visual Studio project files) and compile your solution.
-5. In the Unreal Editor, open Edit -> Plugins and ensure Blsqui Flow Esports Payment SDK is enabled.
+4. Build your project:
+- Windows: Right-click .uproject -> Generate Visual Studio project files and compile your solution.
+- macOS: Run UnrealBuildTool from your terminal:
+```bash
+"/Users/Shared/Epic Games/UE_5.5/Engine/Build/BatchFiles/Mac/Build.sh" \
+  <YourProject>Editor Mac Development \
+  -Project="/path/to/<YourProject>/<YourProject>.uproject"
+```
 
+5. macOS Only — WebRTC (libdatachannel) Dynamic Library & Code Signing Setup:
+The SDK uses libdatachannel for WebRTC communication. On macOS / Apple Silicon, run the following commands from your project root after building so dyld resolves @loader_path/libdatachannel.0.dylib and Gatekeeper validates the signatures:
+```bash
+PROJECT_DIR="/path/to/<YourProject>"
+SRC_DYLIB="$PROJECT_DIR/Plugins/BlsquiSDK/Source/BlsquiSDK/ThirdParty/libdatachannel/lib/Mac/libdatachannel.dylib"
+PLUGIN_BIN="$PROJECT_DIR/Plugins/BlsquiSDK/Binaries/Mac"
+PROJECT_BIN="$PROJECT_DIR/Binaries/Mac"
+
+mkdir -p "$PLUGIN_BIN" "$PROJECT_BIN"
+cp "$SRC_DYLIB" "$PLUGIN_BIN/libdatachannel.0.dylib"
+cp "$SRC_DYLIB" "$PROJECT_BIN/libdatachannel.0.dylib"
+
+install_name_tool -change "@rpath/libdatachannel.0.dylib" "@loader_path/libdatachannel.0.dylib" "$PLUGIN_BIN/UnrealEditor-BlsquiSDK.dylib"
+
+codesign --force --sign - "$PLUGIN_BIN/libdatachannel.0.dylib"
+codesign --force --sign - "$PROJECT_BIN/libdatachannel.0.dylib"
+codesign --force --sign - "$PLUGIN_BIN/UnrealEditor-BlsquiSDK.dylib"
+codesign --force --sign - "$PROJECT_BIN/UnrealEditor-<YourProject>.dylib"
+```
+6. Open your .uproject in the Unreal Editor, go to Edit -> Plugins, and verify BlsquiSDK is enabled.
 
 ## Quick Start Example
-Call `BlsquiSDK.request_transaction()` from any button or event handler:
+Call `Blsqui->RequestTransaction(Options)` from any button or event handler:
 
 ```cpp
 #include "YourPlayerController.h"
@@ -99,7 +124,7 @@ The SDK links equipped on-chain stage slots with web dashboards. When a player t
                                   ▼
 [OnItemUseRequested] ◄──── [WebRTC DataChannel]
        │
-       ▼ (Auto-constructs FBlsquiTxOptions with FlixId, itemId, serialNumber)
+       ▼ (Constructs FBlsquiTxOptions with FlixId, publisherAddress, appId, itemId, serialNumber)
 [BlsquiSDKComponent::RequestTransaction]
        │
        ▼
@@ -115,6 +140,25 @@ if (UBlsquiCurrentUser* CurrentUser = GetGameInstance()->GetSubsystem<UBlsquiCur
 ```
 <br>
 <br>
+
+# Handling `OnItemUseRequested` in C++
+```cpp
+void AYourHUDOrCharacter::HandleItemUseRequested(const FItemUseRequestPayload& Payload)
+{
+    if (UBlsquiSDKComponent* Blsqui = FindComponentByClass<UBlsquiSDKComponent>())
+    {
+        FBlsquiTxOptions Options;
+        Options.bIsTestnet = true;
+        Options.FlixId = Payload.FlixId;
+        Options.Args.Add(TEXT("publisherAddress"), Payload.PublisherAddress);
+        Options.Args.Add(TEXT("appId"), Payload.AppId);
+        Options.Args.Add(TEXT("itemId"), Payload.ItemId);
+        Options.Args.Add(TEXT("serialNumber"), FString::FromInt(Payload.SerialNumber));
+
+        Blsqui->RequestTransaction(Options);
+    }
+}
+```
 
 # 📂 Sample Implementations
 Reference implementations are organized under `Samples/`:
@@ -187,7 +231,7 @@ struct FTxResult
 <br>
 
 ## Requirements
-- Unreal Engine **5.0** or higher
+- Unreal Engine **5.0** or higher (tested on UE 5.5.4 on Apple Silicon & Windows)
 - Standard C++ project setup (Visual Studio 2022, Xcode, or JetBrains Rider)
 - Active internet connection
 <br>
