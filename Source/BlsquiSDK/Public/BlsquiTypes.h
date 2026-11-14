@@ -40,6 +40,9 @@ struct FItemUseRequestPayload
     FString Player = TEXT("");
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui")
+    FString PublisherAddress = TEXT("");
+
+    UPROPERTY(BlueprintReadOnly, Category = "Blsqui")
     FString AppId = TEXT("");
 
     UPROPERTY(BlueprintReadOnly, Category = "Blsqui")

@@ -150,6 +150,14 @@ void UBlsquiCurrentUser::OnPresenceMessageReceived(const FString& RawText)
         FString ReqFlixId = ExtractStringValue(RawText, TEXT("flixId"));
         if (ReqFlixId.IsEmpty()) ReqFlixId = ExtractStringValue(RawText, TEXT("flix_id"));
 
+        FString ReqPublisherAddr = ExtractStringValue(RawText, TEXT("publisherAddress"));
+        if (ReqPublisherAddr.IsEmpty()) ReqPublisherAddr = ExtractStringValue(RawText, TEXT("publisher_address"));
+        if (ReqPublisherAddr.IsEmpty()) ReqPublisherAddr = PublisherAddress;
+
+        FString ReqAppId = ExtractStringValue(RawText, TEXT("appId"));
+        if (ReqAppId.IsEmpty()) ReqAppId = ExtractStringValue(RawText, TEXT("app_id"));
+        if (ReqAppId.IsEmpty()) ReqAppId = AppId;
+
         FString ReqItemId = ExtractStringValue(RawText, TEXT("itemId"));
         if (ReqItemId.IsEmpty()) ReqItemId = ExtractStringValue(RawText, TEXT("item_id"));
 
@@ -159,9 +167,10 @@ void UBlsquiCurrentUser::OnPresenceMessageReceived(const FString& RawText)
         FItemUseRequestPayload Payload;
         Payload.Type = TEXT("ITEM_USE_REQUESTED");
         Payload.FlixId = ReqFlixId;
+        Payload.PublisherAddress = ReqPublisherAddr;
+        Payload.AppId = ReqAppId;
         Payload.ItemId = ReqItemId;
         Payload.Player = ExtractStringValue(RawText, TEXT("player"));
-        Payload.AppId = ExtractStringValue(RawText, TEXT("app_id"));
         Payload.SerialNumber = Serial;
 
         // Broadcast the event to whoever is listening (HUD or Character)
