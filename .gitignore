@@ -73,3 +73,10 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# Whitelist ThirdParty prebuilt libraries
+!Source/**/ThirdParty/**/*.dylib
+!Source/**/ThirdParty/**/*.dll
+!Source/**/ThirdParty/**/*.lib
+!Source/**/ThirdParty/**/*.so
+!Source/**/ThirdParty/**/*.a
