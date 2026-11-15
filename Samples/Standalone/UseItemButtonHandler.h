@@ -4,10 +4,13 @@
 #include <unordered_map>
 #include <functional>
 #include <chrono>
+#include <cstdint>
 
 struct StandaloneItemUsePayload
 {
     std::string FlixId;
+    std::string PublisherAddress;
+    std::string AppId;
     std::string ItemId;
     std::string Player;
     int32_t SerialNumber = 0;

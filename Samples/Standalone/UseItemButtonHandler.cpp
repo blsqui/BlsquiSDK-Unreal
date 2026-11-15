@@ -33,6 +33,8 @@ void UseItemButtonHandlerStandalone::OnItemUseRequestedReceived(const Standalone
     if (!RequestTxFn) return;
 
     std::unordered_map<std::string, std::string> Args;
+    Args["publisherAddress"] = Payload.PublisherAddress;
+    Args["appId"] = Payload.AppId;
     Args["itemId"] = Payload.ItemId;
     Args["serialNumber"] = std::to_string(Payload.SerialNumber);
 

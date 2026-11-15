@@ -51,6 +51,8 @@ void UUseItemButtonHandler::HandleItemUseRequested(const FItemUseRequestPayload&
     FBlsquiTxOptions Options;
     Options.bIsTestnet = true;
     Options.FlixId = Payload.FlixId;
+    Options.Args.Add(TEXT("publisherAddress"), Payload.PublisherAddress);
+    Options.Args.Add(TEXT("appId"), Payload.AppId);
     Options.Args.Add(TEXT("itemId"), Payload.ItemId);
     Options.Args.Add(TEXT("serialNumber"), FString::FromInt(Payload.SerialNumber));
 
@@ -67,7 +69,7 @@ void UUseItemButtonHandler::HandleTransactionCompleted(const FTxResult& Result)
     if (bSuccess)
     {
         Details = FString::Printf(
-            TEXT("• Transaction ID:\n  %s\n\n• Payer: %s\n• Merchant: %s\n• Nonce: %s"),
+            TEXT("• Transaction ID:\n  %s\n\nPayer: %s\nMerchant: %s\nNonce: %s"),
             *Result.TxId,
             *Result.Payer,
             *Result.To,
@@ -77,7 +79,7 @@ void UUseItemButtonHandler::HandleTransactionCompleted(const FTxResult& Result)
     else
     {
         Details = FString::Printf(
-            TEXT("• Error: %s\n\n• Details:\n%s"),
+            TEXT("• Error: %s\n\nDetails:\n%s"),
             Result.Error.IsEmpty() ? TEXT("Item transaction rejected or aborted.") : *Result.Error,
             Result.ErrorMessage.IsEmpty() ? TEXT("No runtime error provided.") : *Result.ErrorMessage
         );
